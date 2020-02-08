@@ -1,0 +1,209 @@
+#include "main.h"
+#include "stm32f0xx_hal.h"
+#include "ds18b20.h"
+#include <stdio.h>
+#include <string.h>
+
+
+extern ADC_HandleTypeDef hadc;
+extern UART_HandleTypeDef huart1;
+GPIO_InitTypeDef GPIO_InitStruct = {0};
+uint8_t sicaklik_byte1, sicaklik_byte2;
+uint16_t ham_deger,toprak_nem;
+float sicaklik;
+char str[50]="";
+
+void delay_ticks(uint32_t ticks)
+
+{
+
+SysTick->LOAD = ticks;
+
+SysTick->VAL = 0;
+
+SysTick->CTRL = SysTick_CTRL_ENABLE_Msk; /* Enable SysTick system timer */
+
+SysTick->CTRL &= ~SYSTICK_CLKSOURCE_HCLK_DIV8;
+SysTick->CTRL |= SYSTICK_CLKSOURCE_HCLK;
+
+
+
+while ((SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk) == 0);
+
+SysTick->CTRL = 0;
+
+}
+
+
+void delay_ms(uint32_t ms)
+
+{
+
+delay_ticks((ms * 48000)); // number of ms*8000000 can overflow so i use 8000 instead of (ms * 8000000) / 1000)
+
+}
+
+ void Delay_us(uint32_t us)
+
+{
+
+delay_ticks((us * 48)); // number of ms*8000000 can overflow so i use 8000 instead of (ms * 8000000) / 1000)
+
+}
+
+void pini_giris_yap (void)
+{
+  GPIO_InitStruct.Pin = GPIO_PIN_4;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+}
+
+
+void pini_cikis_yap (void)
+{
+  GPIO_InitStruct.Pin = GPIO_PIN_4;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+}
+
+
+
+void ds18b20_baslat (void)
+{
+	pini_cikis_yap ();
+	HAL_GPIO_WritePin (GPIOA, GPIO_PIN_4, 0);
+	Delay_us (480);   // minimum 480
+	pini_giris_yap ();
+
+	Delay_us (100);    //pini input yapinca, sensor 16-60 us bekledikten sonra
+	//60-240 us arasi surede pini 0 a cekiyo
+
+	if (!(HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_4)))    // pin 0 ise sensor sinyal gonderdi
+	{
+		Delay_us (400);
+	}
+	else
+	{
+		Delay_us (400);
+	}
+}
+void yaz (uint8_t data)
+{
+	pini_cikis_yap ();
+	for (int i=0; i<8; i++)
+	{
+		if ((data & (1<<i))!=0)
+		{
+			//1 yaz
+			pini_cikis_yap ();
+			HAL_GPIO_WritePin (GPIOA, GPIO_PIN_4, 0);
+			__ASM volatile ("NOP"); // 1 us bekle
+			pini_giris_yap ();
+			Delay_us (60);
+		}
+		else
+		{
+			// 0 yaz
+			pini_cikis_yap ();
+			HAL_GPIO_WritePin (GPIOA, GPIO_PIN_4, 0);
+			Delay_us (60);
+			pini_giris_yap ();
+		}
+	}
+}
+
+
+uint8_t oku(void)
+{
+	uint8_t value=0;
+	pini_giris_yap ();
+
+	for (int i=0;i<8;i++)
+	{
+		pini_cikis_yap ();
+
+		HAL_GPIO_WritePin (GPIOA, GPIO_PIN_4, 0);
+		//Delay_us(2);
+		__ASM volatile ("NOP");
+
+
+
+		pini_giris_yap ();
+		if (HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_4))
+		{
+			value |= 1<<i;  // read = 1
+		}
+		Delay_us (60);  // wait for 60 us
+	}
+	return value;
+}
+
+
+
+
+ void toprak_sicaklik_oku(void)
+ {
+		ds18b20_baslat ();
+		//datasheet sf 18 example
+		yaz (0xCC);
+		yaz (0x44);  //
+		/* This command initiates a single temperature conversion. Following the conversion, the resulting thermal
+		data is stored in the 2-byte temperature register in the scratchpad memory */
+
+
+		ds18b20_baslat ();
+		yaz (0xCC);
+		yaz (0xBE);
+
+		sicaklik_byte1 = oku();
+		sicaklik_byte2 = oku();
+
+
+
+
+
+ }
+
+int toprak_nem_oku(void)
+{
+	toprak_nem = HAL_ADC_GetValue(&hadc);
+	switch (toprak_nem)
+					{
+					case 0 ... 300:
+						toprak_nem=10;
+						break;
+					case 301 ... 375:
+						toprak_nem=9;
+						break;
+					case 376 ... 450:
+						toprak_nem=8;
+						break;
+					case 451 ... 525:
+						toprak_nem=7;
+						break;
+					case 526 ... 600:
+						toprak_nem=6;
+						break;
+					case 601 ... 675:
+						toprak_nem=5;
+						break;
+					case 676 ... 750:
+						toprak_nem=4;
+						break;
+					case 751 ... 825:
+						toprak_nem=3;
+						break;
+					case 826 ... 900:
+						toprak_nem=2;
+						break;
+					case 901 ... 1024:
+						toprak_nem=1;
+						break;
+
+					}
+			return toprak_nem;
+}
+
