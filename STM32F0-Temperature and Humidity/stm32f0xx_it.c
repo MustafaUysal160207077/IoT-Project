@@ -180,13 +180,7 @@ void USART1_IRQHandler(void)
 
   if(gelen_karakter=='s')
   {
-
-
-	//sprintf(str,"%d",sicaklik);
-
-
-
-	  HAL_UART_Transmit(&huart1,&sicaklik_byte1,sizeof(sicaklik_byte1), 500);
+	HAL_UART_Transmit(&huart1,&sicaklik_byte1,sizeof(sicaklik_byte1), 500);
 	HAL_UART_Transmit(&huart1,&sicaklik_byte2,sizeof(sicaklik_byte2), 500);
 	HAL_UART_Transmit(&huart1,&nem_byte1,sizeof(nem_byte1), 500);
 	HAL_UART_Transmit(&huart1,&nem_byte2,sizeof(nem_byte2), 500);
@@ -195,10 +189,6 @@ void USART1_IRQHandler(void)
 	HAL_UART_Transmit(&huart1,&checksum,sizeof(checksum), 500);
 	gelen_karakter ='0';
   }
-
-
-
-
 
   /* USER CODE END USART1_IRQn 1 */
 }
